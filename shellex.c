@@ -4,14 +4,13 @@
 #define MAXARGS 128
 
 /* Function prototypes */
-void eval(char *cmdline, char **envp);
+void eval(char *cmdline);
 int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
 
-int main(int argc, char **argv, char **envp)
+int main()
 {
     char cmdline[MAXLINE]; /* Command line */
-    environ = envp;
     while (1)
     {
         /* Read */
@@ -21,14 +20,14 @@ int main(int argc, char **argv, char **envp)
             _exit(0);
         // tester();
         /* Evaluate */
-        eval(cmdline, envp);
+        eval(cmdline);
     }
 }
 /* $end shellmain */
 
 /* $begin eval */
 /* eval - Evaluate a command line */
-void eval(char *cmdline, char **envp)
+void eval(char *cmdline)
 {
     char *argv[MAXARGS]; /* Argument list execve() */
     char buf[MAXLINE];   /* Holds modified command line */
@@ -105,11 +104,16 @@ int parseline(char *buf, char **argv)
     argc = 0;
     while ((delim = strchr(buf, ' ')))
     {
-        argv[argc++] = buf;
-        *delim = '\0';
+        argv[argc] = buf;
+        *delim = '\0'; // 종지부 찍어주기
+
+        if (strcmp(argv[argc], "|") == 0) // 지금 문자열이 | 인지 확인 중
+            break;
+
         buf = delim + 1;
         while (*buf && (*buf == ' ')) /* Ignore spaces */
             buf++;
+        argc++;
     }
     argv[argc] = NULL;
 
