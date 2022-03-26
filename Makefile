@@ -6,7 +6,7 @@ PROGS = shellex
 
 all: $(PROGS)
 
-shellex: shellex.c csapp.c
+shellex: shellex.c csapp.c mycd.c
 
 clean:
 	rm -rf *~ $(PROGS)
