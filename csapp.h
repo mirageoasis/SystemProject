@@ -6,8 +6,10 @@
 #define __CSAPP_H__
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <assert.h>
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
