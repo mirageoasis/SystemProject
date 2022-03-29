@@ -9,11 +9,22 @@ void eval(char *cmdline, bool got_piped, int cardinality);
 int parseline(char *buf, char **argv, bool *pipeFlag);
 int builtin_command(char **argv);
 int pipe_running(char **argv, int starting_point);
+int pair_clear(char *buf, char c);
 void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *starting_point);
+void sigchild_handler(int sig)
+{
+    // fprintf(stdout, "process has finished!\n");
+    int status;
+    pid_t id = waitpid(-1, &status, WNOHANG);
+    return;
+}
 
 int main()
 {
     char cmdline[MAXLINE]; /* Command line */
+
+    Signal(SIGCHLD, sigchild_handler);
+
     while (1)
     {
         /* Read */
@@ -39,24 +50,22 @@ void eval(char *cmdline, bool got_piped, int step)
     int status;            /*자식 프로세스 종료 여부 확인*/
     char *next_command;    /*(일단 파이프 용도로 만듬)다음에 넘겨줄 명령어*/
     bool pipeFlag = false; /*파이프인지 여부를 판단*/
+    int backtick_flag[2], small_quote_flag[2], big_quote_flag[2];
     strcpy(buf, cmdline);
+
+    pair_clear(buf, '"'); // clear ""
+    pair_clear(buf, 39);  // clear '
+    pair_clear(buf, '`'); // clear '
     bg = parseline(buf, argv, &pipeFlag);
     if (argv[0] == NULL)
         return; /* Ignore empty lines */
 
-    // fprintf(stdout, "now command %s\n", cmdline);
-
-    // for (int i = 0; argv[i] != NULL; i++)
-    // {
-    //     fprintf(stdout, "the %dth argument is %s\n", i, argv[i]);
-    // }
-
     if (!builtin_command(argv))
     { // quit -> exit(0), & -> ignore, other -> run
-
         // printf("hi my name is !\n");
         if ((pid = Fork()) == 0)
         {
+            // printf("running the job %s\n", argv[0]);
             /* Child runs user job */
             char dest[128];
             strcpy(dest, "/bin/");
@@ -69,6 +78,7 @@ void eval(char *cmdline, bool got_piped, int step)
             else if (execve(dest, argv, environ) < 0) // 일단 임시방편
             {                                         // ex) /bin/ls ls -al &
                 printf("%s Command not found.\n", argv[0]);
+                exit(0);
             }
         }
         else
@@ -149,6 +159,7 @@ int parseline(char *buf, char **argv, bool *pipeFlag)
 }
 /* $end parseline */
 
+/*function for dealing with piped sentence*/
 int pipe_running(char **argv, int starting_point)
 {
     char *front[MAXARGS] = {0};
@@ -169,7 +180,7 @@ int pipe_running(char **argv, int starting_point)
     if (pipe(fd) == -1)
     {
         fprintf(stderr, "pipe not working!\n");
-        assert(0);
+        exit(1);
     }
 
     // 파이프 있는지 찾기
@@ -204,18 +215,18 @@ int pipe_running(char **argv, int starting_point)
     }
     else
     {
-        // close(fd[1]);
-        // dup2(fd[0], STDIN_FILENO);
         char dest[128];
         strcpy(dest, "/bin/");
         strcat(dest, front[0]);               // argv 없에기!
         if (execve(dest, front, environ) < 0) // 일단 임시방편
         {                                     // ex) /bin/ls ls -al &
             printf("%s Command not found.\n", argv[prev_starting_point]);
+            exit(0);
         }
     }
 }
 
+/*find if there are pipe in argv*/
 void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *starting_point)
 {
     int front_cnt = 0;
@@ -228,14 +239,13 @@ void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *st
         {
             *pipeFlag = true;
             argv[i] = NULL;
-            // fprintf(stdout, "%d %d\n", i, i + 1);
             *starting_point = i + 1; // 자신 뒤로 starting point를 옮기기
             break;
         }
         front[front_cnt] = argv[i];
     }
 
-    if (argv[i] == NULL && pipeFlag == false) // 파이프도 없는데 끝까지 도달했다?
+    if (argv[i] == NULL && pipeFlag == false) // 파이프도 없는데 끝까지 도달했다? out!
     {
         *starting_point = i;
         return;
@@ -244,5 +254,25 @@ void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *st
     for (i = *starting_point; argv[i] != 0; i++, back_cnt++)
     {
         back[back_cnt] = argv[i];
+    }
+}
+
+/*determine if there are two qutoes in sentence*/
+int pair_clear(char *buf, char c)
+{
+    int temp[2];
+    int count = 0;
+    for (int i = 0; i < strlen(buf); i++)
+    {
+        if (buf[i] == c)
+        {
+            temp[count % 2] = i;
+            count++;
+            if (!(count % 2))
+            { // pair가 맞을 때
+                buf[temp[0]] = ' ';
+                buf[temp[1]] = ' ';
+            }
+        }
     }
 }

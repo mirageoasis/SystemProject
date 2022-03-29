@@ -9,11 +9,5 @@ int my_cd(char **argv)
         return chdir(getenv("HOME"));
     }
 
-    // for (int i = 0; argv[i] != NULL; i++)
-    // {
-    //     char *argument = argv[i];
-    //     fprintf(stdout, "argument 순서대로 %s\n", argument);
-    // }
-
     return chdir(argv[1]);
 }
