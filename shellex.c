@@ -2,22 +2,18 @@
 #include "csapp.h"
 #include <errno.h>
 #define MAXARGS 128
-int fds[MAXARGS - 1][2]; /*파일 디스크립터 저장용*/
 
 /* Function prototypes */
 void eval(char *cmdline, bool got_piped, int cardinality);
-int parseline(char *buf, char **argv, bool *pipeFlag);
+int parseline(char *buf, char **argv);
 int builtin_command(char **argv);
 int pipe_running(char **argv, int starting_point);
 int pair_clear(char *buf, char c);
 void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *starting_point);
-void sigchild_handler(int sig)
-{
-    // fprintf(stdout, "process has finished!\n");
-    int status;
-    pid_t id = waitpid(-1, &status, WNOHANG);
-    return;
-}
+void sigchild_handler(int sig);
+
+JOB_INFO jobs[100];
+JOB_INFO *head = NULL;
 
 int main()
 {
@@ -32,10 +28,10 @@ int main()
         fgets(cmdline, MAXLINE, stdin);
         if (feof(stdin))
             exit(0);
-        // tester();
-        /* Evaluate */
         eval(cmdline, false, 0);
     }
+
+    // jobs 구조체 해제하기
 }
 /* $end shellmain */
 
@@ -46,19 +42,38 @@ void eval(char *cmdline, bool got_piped, int step)
     char *argv[MAXARGS];   /* Argument list execve() */
     char buf[MAXLINE];     /* Holds modified command line */
     int bg;                /* Should the job run in bg or fg? */
+    int argc;              /*number of arguments*/
     pid_t pid;             /* Process id */
     int status;            /*자식 프로세스 종료 여부 확인*/
     char *next_command;    /*(일단 파이프 용도로 만듬)다음에 넘겨줄 명령어*/
     bool pipeFlag = false; /*파이프인지 여부를 판단*/
     int backtick_flag[2], small_quote_flag[2], big_quote_flag[2];
+    sigset_t mask_all, mask_one, prev_one;
+
+    Sigfillset(&mask_all);
+    Sigemptyset(&mask_one);
+    Sigaddset(&mask_one, SIGCHLD);
+
     strcpy(buf, cmdline);
 
     pair_clear(buf, '"'); // clear ""
     pair_clear(buf, 39);  // clear '
     pair_clear(buf, '`'); // clear '
-    bg = parseline(buf, argv, &pipeFlag);
+    bg = parseline(buf, argv);
     if (argv[0] == NULL)
         return; /* Ignore empty lines */
+
+    for (argc = 0; argv[argc] != NULL; argc++) /*pipe 유무를 찾아주는 반복문*/
+        if (!strcmp(argv[argc], "|"))
+            pipeFlag = true;
+
+    // fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
+
+    if (argv[argc - 1][strlen(argv[argc - 1]) - 1] == '&')
+    {
+        bg = 1;
+        argv[argc - 1][strlen(argv[argc - 1]) - 1] = '\0';
+    }
 
     if (!builtin_command(argv))
     { // quit -> exit(0), & -> ignore, other -> run
@@ -90,7 +105,10 @@ void eval(char *cmdline, bool got_piped, int step)
                 // fprintf(stdout, "eval caculated!\n");
             }
             else // when there is background process!
-                printf("%d %s", pid, cmdline);
+            {
+                add_job(pid, cmdline);
+                // fprintf(stdout, "%d %s", pid, cmdline);
+            }
         }
     }
     // fprintf(stdout, "this is the end\n");
@@ -109,9 +127,28 @@ int builtin_command(char **argv)
 
         return 1;
     }
-    if (!strcmp(argv[0], "exit")) /* quit command */
+    else if (!strcmp(argv[0], "jobs"))
+    {
+        /* job update() 를 해야함 원하는 구상은 jobs에서 부르면 그냥 업데이트만 해주고 꺼져주기 아니면 출력하고 삭제까지*/
+        job_list();
+        return 1;
+    }
+    else if (!strcmp(argv[0], "fg"))
+    {
+        return 1;
+    }
+    else if (!strcmp(argv[0], "bg"))
+    {
+        return 1;
+    }
+    else if (!strcmp(argv[0], "kill"))
+    {
+        // Kill()
+        return 1;
+    }
+    else if (!strcmp(argv[0], "exit")) /* quit command */
         exit(0);
-    if (!strcmp(argv[0], "&")) /* Ignore singleton & */
+    else if (!strcmp(argv[0], "&")) /* Ignore singleton & */
         return 1;
     return 0; /* Not a builtin command */
 }
@@ -119,7 +156,7 @@ int builtin_command(char **argv)
 
 /* $begin parseline */
 /* parseline - Parse the command line and build the argv array */
-int parseline(char *buf, char **argv, bool *pipeFlag)
+int parseline(char *buf, char **argv)
 {
     char *delim; /* Points to first space delimiter */
     int argc;    /* Number of args */
@@ -137,11 +174,6 @@ int parseline(char *buf, char **argv, bool *pipeFlag)
         *delim = '\0'; // 종지부 찍어주기
         buf = delim + 1;
 
-        if (!strcmp(argv[argc], "|"))
-        { // 지금 문자열이 | 인지 확인 중
-            *pipeFlag = true;
-            // break;
-        }
         while (*buf && (*buf == ' ')) /* Ignore spaces */
             buf++;
         argc++;
@@ -275,4 +307,12 @@ int pair_clear(char *buf, char c)
             }
         }
     }
+}
+
+void sigchild_handler(int sig)
+{
+    // fprintf(stdout, "process has finished!\n");
+    int status;
+    pid_t id = waitpid(-1, &status, WNOHANG);
+    return;
 }
