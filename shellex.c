@@ -1,5 +1,8 @@
 /* $begin shellmain */
 #include "csapp.h"
+#include "mycd.h"
+#include "job.h"
+#include "signal_handler.h"
 #include <errno.h>
 #define MAXARGS 128
 
@@ -10,16 +13,19 @@ int builtin_command(char **argv);
 int pipe_running(char **argv, int starting_point);
 int pair_clear(char *buf, char c);
 void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *starting_point);
-void sigchild_handler(int sig);
 
 JOB_INFO jobs[100];
 JOB_INFO *head = NULL;
+int gpid_now;
+int test = 0;
 
 int main()
 {
-    char cmdline[MAXLINE]; /* Command line */
 
+    char cmdline[MAXLINE]; /* Command line */
     Signal(SIGCHLD, sigchild_handler);
+    //  Signal(SIGINT, sigint_handler); // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
+    Signal(SIGTSTP, sigstp_handler); // set handler for SIGTSTP
 
     while (1)
     {
@@ -30,7 +36,7 @@ int main()
             exit(0);
         eval(cmdline, false, 0);
     }
-
+    return 0;
     // jobs 구조체 해제하기
 }
 /* $end shellmain */
@@ -53,6 +59,8 @@ void eval(char *cmdline, bool got_piped, int step)
     Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
+
+    Sigprocmask(SIG_BLOCK, &mask_one, NULL);
 
     strcpy(buf, cmdline);
 
@@ -80,6 +88,8 @@ void eval(char *cmdline, bool got_piped, int step)
         // printf("hi my name is !\n");
         if ((pid = Fork()) == 0)
         {
+            if (setpgid(0, 0) == -1)
+                unix_error("error in setpgid on line 87!\n");
             // printf("running the job %s\n", argv[0]);
             /* Child runs user job */
             char dest[128];
@@ -101,8 +111,14 @@ void eval(char *cmdline, bool got_piped, int step)
             /* Parent waits for foreground job to terminate */
             if (!bg)
             {
+                gpid_now = pid;
+                fprintf(stdout, "parent pid is %d\n", getpid());
+                fprintf(stdout, "pid of child  is %d\n", pid);
+                fprintf(stdout, "gpid of child is %d\n", gpid_now);
                 Wait(&status);
-                // fprintf(stdout, "eval caculated!\n");
+                fprintf(stdout, "passed test on Wait on line 119 on eval func\n");
+                gpid_now = 0;
+                //   fprintf(stdout, "eval caculated!\n");
             }
             else // when there is background process!
             {
@@ -112,6 +128,7 @@ void eval(char *cmdline, bool got_piped, int step)
         }
     }
     // fprintf(stdout, "this is the end\n");
+    Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
     return;
 }
 
@@ -307,12 +324,4 @@ int pair_clear(char *buf, char c)
             }
         }
     }
-}
-
-void sigchild_handler(int sig)
-{
-    // fprintf(stdout, "process has finished!\n");
-    int status;
-    pid_t id = waitpid(-1, &status, WNOHANG);
-    return;
 }

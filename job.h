@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define MAXLINE 8192 /* Max text line length */
+
 //백그라운드 잡
 enum
 {
@@ -22,11 +24,13 @@ typedef struct JOB_INFO
     pid_t pid;
     int idx;
     int status;
-    char cmd[8192]; // maxline 이다 csapp에 정의되어있는
+    char cmd[MAXLINE]; // maxline 이다 csapp에 정의되어있는
     struct JOB_INFO *next;
 } JOB_INFO;
 
 void add_job(int pid, char *cmd_line);
+int del_job(int);
 void job_list();
+int locate_job_by_pid();
 
 extern JOB_INFO *head;
