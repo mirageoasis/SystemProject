@@ -25,16 +25,17 @@ void job_list()
     }
 }
 
-void add_job(int pid, char *cmd_line)
+void add_job(int pid, int status, char *cmd_line)
 {
     /*프로세스가 하나도 추가가 되지 않았다면*/
     JOB_INFO *pnew = (JOB_INFO *)malloc(sizeof(JOB_INFO));
+    assert(cmd_line != NULL);
+    assert(pnew != NULL);
     if (head == NULL)
     {
-
         pnew->idx = 1;
         pnew->pid = pid;
-        pnew->status = RUNNING;
+        pnew->status = status;
         pnew->next = NULL;
         strcpy(pnew->cmd, cmd_line);
 
@@ -42,7 +43,7 @@ void add_job(int pid, char *cmd_line)
     }
     else
     {
-
+        assert(head != NULL);
         JOB_INFO *cur = head;
         JOB_INFO *prev;
 
@@ -55,7 +56,7 @@ void add_job(int pid, char *cmd_line)
         /*pnew 정보 입력*/
         pnew->idx = (prev->idx) + 1;
         pnew->pid = pid;
-        pnew->status = RUNNING;
+        pnew->status = status;
         strcpy(pnew->cmd, cmd_line);
         pnew->next = NULL;
         /*pnew 이전 친구 next 설정하기*/
