@@ -66,7 +66,74 @@ void add_job(int pid, int status, char *cmd_line)
     fprintf(stdout, "[%d] %d\n", pnew->idx, pid);
 }
 
-void job_find(pid_t pid, int idx, int mod)
+pid_t find_job(int idx, pid_t pid, int mod)
 {
-    // if ()
+    JOB_INFO *temp = head;
+    while (temp != NULL)
+    {
+        if (mod == INDEX)
+            if (idx == temp->idx)
+                return temp->pid;
+        if (mod == PID)
+            if (pid == temp->pid)
+                return temp->pid;
+
+        temp = temp->next;
+    }
+
+    return -1;
+}
+
+pid_t change_job(int idx, int status)
+{
+    JOB_INFO *temp = head;
+    while (temp != NULL)
+    {
+        if (idx == temp->idx)
+        {
+            fprintf(stdout, "changed idx %d\n", idx);
+            temp->status = status;
+            return temp->pid;
+        }
+        temp = temp->next;
+    }
+
+    return -1;
+}
+
+/*무조건 find_job 이 확인되고 나서 쓴다*/
+int delete_job(int idx, pid_t pid, int mod)
+{
+    JOB_INFO *cur = head;
+    JOB_INFO *prev = head;
+    while (cur != NULL)
+    {
+        if (mod == INDEX)
+            if (idx == cur->idx)
+                break;
+        if (mod == PID)
+            if (pid == cur->pid)
+                break;
+        prev = cur; // 전에꺼 저장
+        cur = cur->next;
+    }
+    Sio_puts("\n[");
+    Sio_putl(cur->idx);
+    Sio_puts("] pid ");
+    Sio_putl(cur->pid);
+    Sio_puts("      ");
+    Sio_puts(cur->cmd);
+    Sio_puts("> ");
+    if (cur == head)
+    {
+        head = cur->next;
+        free(cur);
+    }
+    else
+    {
+        prev->next = cur->next;
+        free(cur);
+    }
+
+    return 0;
 }

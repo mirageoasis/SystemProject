@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <assert.h>
 
 #define MAXLINE 8192 /* Max text line length */
@@ -21,6 +22,12 @@ enum
     STOPPED
 }; // job status
 
+enum
+{
+    PID,
+    INDEX
+};
+
 typedef struct JOB_INFO
 {
     pid_t pid;
@@ -31,8 +38,9 @@ typedef struct JOB_INFO
 } JOB_INFO;
 
 void add_job(int pid, int status, char *cmd_line);
-int del_job(int);
 void job_list();
-int locate_job_by_pid();
+pid_t find_job(int idx, pid_t pid, int mod);
+pid_t change_job(int idx, int mod);
+int delete_job(int idx, pid_t pid, int mod);
 
 extern JOB_INFO *head;

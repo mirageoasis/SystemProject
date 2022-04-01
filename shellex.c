@@ -18,10 +18,18 @@ void sigchild_handler(int sig);
 void sigint_handler(int sig);
 void sigtstp_handler(int sig);
 
+void fg_bg_kill_finder(char **argv, int mod);
+
 char cmdline[MAXLINE]; /* Command line */
 JOB_INFO *head = NULL;
 int gpid_now;
-int test = 0;
+
+enum
+{
+    BG,
+    FG,
+    KILL
+};
 
 int main()
 {
@@ -155,15 +163,19 @@ int builtin_command(char **argv)
     }
     else if (!strcmp(argv[0], "fg"))
     {
+        fg_bg_kill_finder(argv, FG);
         return 1;
     }
     else if (!strcmp(argv[0], "bg"))
     {
+        // printf("now on bg option\n");
+        fg_bg_kill_finder(argv, BG);
         return 1;
     }
     else if (!strcmp(argv[0], "kill"))
     {
         // Kill()
+        fg_bg_kill_finder(argv, KILL);
         return 1;
     }
     else if (!strcmp(argv[0], "exit")) /* quit command */
@@ -339,24 +351,24 @@ void sigchild_handler(int sig)
     while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0)
     { /* Reap child */
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-        // delete_job(pid); /* Delete the child from the job list */
         if (WIFEXITED(wstatus))
         {
             //정상적으로 나갔을 때 exit을 불러서
+            // Sio_puts("job exited normally!\n");
+            if (find_job(-1, pid, PID) != -1)
+                delete_job(-1, pid, PID); /* Delete the child from the job list */
         }
         else if (WIFSIGNALED(wstatus))
         {
             //시그널에 의해서 종료가 되었을 때
-            sio_puts("now in sigchild function!\n");
+            if (find_job(-1, pid, PID) != -1)
+                delete_job(-1, pid, PID); /* Delete the child from the job list */
         }
-        // else if (WIFSTOPPED(wstatus))
-        // {
-        //     // 시그널에 의해서 멈췄을 때
-        // }
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
     // if (errno != ECHILD)
     //     Sio_error("waitpid error on sig child function!\n");
+    // sio_puts("now in sigchild handler!\n");
     errno = olderrno;
 }
 
@@ -379,17 +391,74 @@ void sigint_handler(int sig)
 void sigtstp_handler(int sig)
 {
     // 일단 처음 실행된 작업인 경우만 계산해준다.
+    assert(gpid_now != getpid());
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-    assert(gpid_now != getpid());
     if (gpid_now)
     {
         Kill(-gpid_now, SIGTSTP);
-        add_job(gpid_now, STOPPED, cmdline); // 다른 파일에 넣었더만 cmd_line이 제대로 안넘어감
+        add_job(gpid_now, STOPPED, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
     }
     gpid_now = 0; // 다시 무효화
     Sigprocmask(SIG_UNBLOCK, &mask_all, &prev_all);
+}
+
+void fg_bg_kill_finder(char **argv, int mod)
+{
+    if (argv[1] == NULL)
+    {
+        printf("default option!\n");
+    }
+    else if (argv[1][0] == '%')
+    {
+        // printf("percentage option number %d\n", argv[1][1]);
+        if (argv[1][1] == '\0') // 기본 사양으로 돌아가게한다.
+        {
+            printf("default function!\n");
+        }
+        else if (isdigit(argv[1][1]))
+        {
+            int idx = atoi(argv[1] + 1);
+            // printf("the idx number is %s!\n", argv[1] + 1);
+            // printf("the idx number is %d!\n", idx);
+            if (find_job(idx, -1, INDEX) != -1) // 찾았으면 ㄱㄱ
+            {
+                // printf("found the job!\n");
+                switch (mod)
+                {
+                case FG:
+                    fprintf(stdout, "here comes the fg command! %d\n", find_job(idx, -1, INDEX));
+                    signal(SIGTTIN, SIG_IGN);
+                    signal(SIGTTOU, SIG_IGN);
+
+                    tcsetpgrp(STDIN_FILENO, find_job(idx, -1, INDEX));
+                    kill(-find_job(idx, -1, INDEX), SIGCONT);
+                    tcsetpgrp(STDIN_FILENO, getpgrp());
+
+                    // safe to end protection from signals
+                    signal(SIGTTIN, SIG_DFL);
+                    signal(SIGTTOU, SIG_DFL);
+                    // Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고 sigcont 신호 보내주기
+                    break;
+                case BG:
+                    Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
+                    break;
+                case KILL:
+                    Kill(-change_job(idx, DONE), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
+                    break;
+                }
+            }
+            else
+            {
+                printf("no such job!\n"); // 모르면 ㄴㄴ
+            }
+        }
+    }
+    else
+    {
+        printf("undefined!\n");
+    }
 }
