@@ -347,6 +347,7 @@ void sigchild_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
+    Sio_puts("now in sigchild handler!\n");
     Sigfillset(&mask_all);
     while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0)
     { /* Reap child */
@@ -368,7 +369,6 @@ void sigchild_handler(int sig)
     }
     // if (errno != ECHILD)
     //     Sio_error("waitpid error on sig child function!\n");
-    // sio_puts("now in sigchild handler!\n");
     errno = olderrno;
 }
 
@@ -422,6 +422,8 @@ void fg_bg_kill_finder(char **argv, int mod)
         else if (isdigit(argv[1][1]))
         {
             int idx = atoi(argv[1] + 1);
+            pid_t pid;
+            int wstatus;
             // printf("the idx number is %s!\n", argv[1] + 1);
             // printf("the idx number is %d!\n", idx);
             if (find_job(idx, -1, INDEX) != -1) // 찾았으면 ㄱㄱ
@@ -437,7 +439,21 @@ void fg_bg_kill_finder(char **argv, int mod)
                     tcsetpgrp(STDIN_FILENO, find_job(idx, -1, INDEX));
                     kill(-find_job(idx, -1, INDEX), SIGCONT);
                     tcsetpgrp(STDIN_FILENO, getpgrp());
-
+                    while ((pid = waitpid(-1, &wstatus, WUNTRACED)) < 0)
+                    { /* Reap child */
+                        if (WIFEXITED(wstatus))
+                        {
+                            if (find_job(-1, pid, PID) != -1)
+                                delete_job(-1, pid, PID); /* Delete the child from the job list */
+                        }
+                        else if (WIFSIGNALED(wstatus))
+                        {
+                            //시그널에 의해서 종료가 되었을 때
+                            if (find_job(-1, pid, PID) != -1)
+                                delete_job(-1, pid, PID); /* Delete the child from the job list */
+                        }
+                    }
+                    fprintf(stdout, "line 458!\n");
                     // safe to end protection from signals
                     signal(SIGTTIN, SIG_DFL);
                     signal(SIGTTOU, SIG_DFL);
