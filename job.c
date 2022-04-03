@@ -59,7 +59,11 @@ void add_job(int pid, int status, int fgFlag, char *cmd_line)
         prev->next = pnew;
     }
 
-    fprintf(stdout, "[%d] %d\n", pnew->idx, pid);
+    // Sio_puts("[");
+    // Sio_putl(pnew->idx);
+    // Sio_puts("]");
+    // Sio_putl(pid);
+    // Sio_puts("\n");
 }
 
 JOB_INFO *find_job(int idx, pid_t pid, int mod)
@@ -89,9 +93,9 @@ pid_t change_job(int idx, int pid, int status, int fgFlag, int mod)
         if (mod == INDEX)
             if (idx == temp->idx)
             {
-                Sio_puts("changed idx: ");
-                Sio_putl(temp->idx);
-                Sio_puts("\n");
+                // Sio_puts("changed idx: ");
+                // Sio_putl(temp->idx);
+                // Sio_puts("\n");
                 temp->status = status;
                 temp->fgFlag = fgFlag;
                 return temp->pid;
@@ -99,9 +103,9 @@ pid_t change_job(int idx, int pid, int status, int fgFlag, int mod)
         if (mod == PID)
             if (pid == temp->pid)
             {
-                Sio_puts("changed idx: ");
-                Sio_putl(temp->idx);
-                Sio_puts("\n");
+                // Sio_puts("changed idx: ");
+                // Sio_putl(temp->idx);
+                // Sio_puts("\n");
                 temp->status = status;
                 temp->fgFlag = fgFlag;
                 return temp->pid;
@@ -128,7 +132,7 @@ int delete_job(int idx, pid_t pid, int mod)
         prev = cur; // 전에꺼 저장
         cur = cur->next;
     }
-    Sio_puts("deleted to job!\n");
+    // Sio_puts("deleted to job!\n");
     Sio_puts("[");
     Sio_putl(cur->idx);
     Sio_puts("] pid ");
@@ -137,8 +141,8 @@ int delete_job(int idx, pid_t pid, int mod)
     Sio_puts(cur->cmd);
     if (cur == head)
     {
-        head = cur->next; // NULL로 만드는거
-        Sio_puts("head!\n");
+        head = cur->next; // NULL로 만드는거나
+        // Sio_puts("head!\n");
         free(cur);
     }
     else

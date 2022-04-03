@@ -24,8 +24,6 @@ void wait_fg(int pid);
 char cmdline[MAXLINE]; /* Command line */
 JOB_INFO *head = NULL;
 int gpid_now;
-int fg_gpid_now;
-bool fg_now = false;
 
 enum
 {
@@ -38,13 +36,12 @@ int main()
 {
 
     Signal(SIGCHLD, sigchild_handler);
-    // Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
+    Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
     Signal(SIGTSTP, sigtstp_handler); // set handler for SIGTSTP
 
     while (1)
     {
         /* Read */
-        fg_now = false;
         gpid_now = 0;
         printf("> ");
         fgets(cmdline, MAXLINE, stdin);
@@ -268,13 +265,19 @@ int pipe_running(char **argv, int starting_point)
             close(fd[0]);
             dup2(fd[1], STDOUT_FILENO);
             char dest[128];
+            char dest1[128];
             strcpy(dest, "/bin/");
+            strcpy(dest1, "/usr/bin/");
             strcat(dest, argv[prev_starting_point]);
+            strcat(dest1, argv[prev_starting_point]);
 
             if (execve(dest, argv + prev_starting_point, environ) < 0) // 일단 임시방편
-            {                                                          // ex) /bin/ls ls -al &
-                printf("%s Command not found.\n", argv[prev_starting_point]);
-                exit(0);
+            {
+                if (execve(dest1, argv + prev_starting_point, environ) < 0)
+                { // ex) /bin/ls ls -al &
+                    printf("%s Command not found. line 279\n", argv[prev_starting_point]);
+                    exit(0);
+                }
             }
         }
         else
@@ -288,12 +291,18 @@ int pipe_running(char **argv, int starting_point)
     else
     {
         char dest[128];
+        char dest1[128];
         strcpy(dest, "/bin/");
-        strcat(dest, front[0]);               // argv 없에기!
-        if (execve(dest, front, environ) < 0) // 일단 임시방편
-        {                                     // ex) /bin/ls ls -al &
-            printf("%s Command not found.\n", argv[prev_starting_point]);
-            exit(0);
+        strcpy(dest1, "/usr/bin/");
+        strcat(dest, front[0]);  // argv 없에기!
+        strcat(dest1, front[0]); //
+        if (execve(dest, front, environ) < 0)
+        { // 일단 임시방편                                 // ex) /bin/ls ls -al &
+            if (execve(dest1, front, environ) < 0)
+            {
+                printf("%s Command not found. line 305\n", argv[prev_starting_point]);
+                exit(0);
+            }
         }
     }
 }
@@ -355,45 +364,45 @@ void sigchild_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
-    Sio_puts("now in sigchild handler!\n");
+    // Sio_puts("now in sigchild handler!\n");
     Sigfillset(&mask_all);
     while ((pid = waitpid(-1, &wstatus, WNOHANG | WUNTRACED)) > 0)
     { /* Reap child */
-        Sio_puts("now in sigchild handler loop!\n");
+        // Sio_puts("now in sigchild handler loop!\n");
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
         if (WIFEXITED(wstatus))
         {
             //정상적으로 나갔을 때 exit을 불러서
             // Sio_puts("job exited normally!\n");
-            Sio_puts("in WIFXITED!\n");
+            // Sio_puts("in WIFXITED!\n");
             if (find_job(-1, pid, PID) != NULL)
                 delete_job(-1, pid, PID); /* Delete the child from the job list */
         }
         else if (WIFSIGNALED(wstatus))
         {
             //시그널에 의해서 종료가 되었을 때
-            Sio_puts("in WIFSIGNALED!");
-            Sio_puts("dealing with signal :");
-            Sio_putl(pid);
-            Sio_puts("\n");
+            // Sio_puts("in WIFSIGNALED!");
+            // Sio_puts("dealing with signal :");
+            // Sio_putl(pid);
+            // Sio_puts("\n");
             if (find_job(-1, pid, PID) != NULL) // 존재한다면
                 delete_job(-1, pid, PID);       /* Delete the child from the job list */
         }
         else if (WIFSTOPPED(wstatus))
         {
-            Sio_puts("in WIFSTOPPED!\n");
-            Sio_puts("dealing with signal :");
-            Sio_putl(pid);
-            Sio_puts("\n");
+            // Sio_puts("in WIFSTOPPED!\n");
+            // Sio_puts("dealing with signal :");
+            // Sio_putl(pid);
+            // Sio_puts("\n");
             //이거는 존재 여부 확인하고 하자 무지성은 ㄴㄴ
             if (find_job(-1, pid, PID) != NULL)
             { // 존재한다면 작업의 상태 변환
-                Sio_puts("already exists!\n");
+                // Sio_puts("already exists!\n");
                 assert(change_job(-1, gpid_now, STOPPED, false, PID) != -1);
             }
             else
             { // 존재하지 않으면 추가
-                Sio_puts("not exists!\n");
+                // Sio_puts("not exists!\n");
                 add_job(gpid_now, STOPPED, false, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
             }
         }
@@ -429,10 +438,10 @@ void sigtstp_handler(int sig)
     int wstatus; // 종료상태
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-    Sio_puts("in sigtstp handler! ");
+    /// Sio_puts("in sigtstp handler! ");
     // Sio_putl(gpid_now); // 명령 실행 할때는 gpid 가 0이라서 문제가 생긴다 fg 일 때
-    Sio_putl(gpid_now);
-    Sio_puts("\n");
+    // Sio_putl(gpid_now);
+    // Sio_puts("\n");
     if (gpid_now)
     {
         Kill(-gpid_now, SIGTSTP);
@@ -511,7 +520,7 @@ void fg_bg_kill_finder(char **argv, int mod)
 
 void wait_fg(int pid)
 {
-    printf("in wait_fg function! now\n");
+    // printf("in wait_fg function! now\n");
     JOB_INFO *target = find_job(-1, pid, PID);
     // assert(index != -1); // 못찾으면 에러뜬다!
 
@@ -520,12 +529,12 @@ void wait_fg(int pid)
 
     while (target != NULL && target->fgFlag == true) // 작업을 못찾거나 fgFlag 가 flase이면 떠난다.
     {
-        printf("\
-job status\n\
-cmd : %sfgFlag : %d\n\
-idx: %d\n\
-pid: %d\n",
-               target->cmd, target->fgFlag, target->idx, target->pid);
+        //         printf("\
+// job status\n\
+// cmd : %sfgFlag : %d\n\
+// idx: %d\n\
+// pid: %d\n",
+        //                target->cmd, target->fgFlag, target->idx, target->pid);
         sleep(1);
         target = find_job(-1, pid, PID);
     }
