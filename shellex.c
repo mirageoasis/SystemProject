@@ -19,6 +19,7 @@ void sigint_handler(int sig);
 void sigtstp_handler(int sig);
 
 void fg_bg_kill_finder(char **argv, int mod);
+void wait_fg(int pid);
 
 char cmdline[MAXLINE]; /* Command line */
 JOB_INFO *head = NULL;
@@ -43,6 +44,8 @@ int main()
     while (1)
     {
         /* Read */
+        fg_now = false;
+        gpid_now = 0;
         printf("> ");
         fgets(cmdline, MAXLINE, stdin);
         if (feof(stdin))
@@ -125,17 +128,20 @@ void eval(char *cmdline, bool got_piped, int step)
             if (!bg)
             {
                 gpid_now = pid;
+                // printf("now in final bg!\n");
+                add_job(pid, RUNNING, true, cmdline);
+                Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
+                wait_fg(pid);
                 // fprintf(stdout, "parent pid is %d\n", getpid());
                 // fprintf(stdout, "pid of child  is %d\n", pid);
                 // fprintf(stdout, "gpid of child is %d\n", gpid_now);
-                Waitpid(-1, &status, WUNTRACED);
                 // fprintf(stdout, "passed test on Wait on line 119 on eval func\n");
-                gpid_now = 0;
+                // gpid_now = 0;
                 //   fprintf(stdout, "eval caculated!\n");
             }
             else // when there is background process!
             {
-                add_job(pid, RUNNING, cmdline);
+                add_job(pid, RUNNING, false, cmdline);
                 // fprintf(stdout, "%d %s", pid, cmdline);
             }
         }
@@ -351,21 +357,45 @@ void sigchild_handler(int sig)
     int wstatus; // 종료상태
     Sio_puts("now in sigchild handler!\n");
     Sigfillset(&mask_all);
-    while ((pid = waitpid(-1, &wstatus, WNOHANG)) > 0)
+    while ((pid = waitpid(-1, &wstatus, WNOHANG | WUNTRACED)) > 0)
     { /* Reap child */
+        Sio_puts("now in sigchild handler loop!\n");
         Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
         if (WIFEXITED(wstatus))
         {
             //정상적으로 나갔을 때 exit을 불러서
             // Sio_puts("job exited normally!\n");
-            if (find_job(-1, pid, PID) != -1)
+            Sio_puts("in WIFXITED!\n");
+            if (find_job(-1, pid, PID) != NULL)
                 delete_job(-1, pid, PID); /* Delete the child from the job list */
         }
         else if (WIFSIGNALED(wstatus))
         {
             //시그널에 의해서 종료가 되었을 때
-            if (find_job(-1, pid, PID) != -1)
-                delete_job(-1, pid, PID); /* Delete the child from the job list */
+            Sio_puts("in WIFSIGNALED!");
+            Sio_puts("dealing with signal :");
+            Sio_putl(pid);
+            Sio_puts("\n");
+            if (find_job(-1, pid, PID) != NULL) // 존재한다면
+                delete_job(-1, pid, PID);       /* Delete the child from the job list */
+        }
+        else if (WIFSTOPPED(wstatus))
+        {
+            Sio_puts("in WIFSTOPPED!\n");
+            Sio_puts("dealing with signal :");
+            Sio_putl(pid);
+            Sio_puts("\n");
+            //이거는 존재 여부 확인하고 하자 무지성은 ㄴㄴ
+            if (find_job(-1, pid, PID) != NULL)
+            { // 존재한다면 작업의 상태 변환
+                Sio_puts("already exists!\n");
+                assert(change_job(-1, gpid_now, STOPPED, false, PID) != -1);
+            }
+            else
+            { // 존재하지 않으면 추가
+                Sio_puts("not exists!\n");
+                add_job(gpid_now, STOPPED, false, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
+            }
         }
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
@@ -386,7 +416,7 @@ void sigint_handler(int sig)
     assert(gpid_now != getpid());
     if (gpid_now)
         Kill(-gpid_now, SIGINT);
-    gpid_now = 0; // 다시 무효화
+    // gpid_now = 0; // 다시 무효화
     Sigprocmask(SIG_UNBLOCK, &mask_all, &prev_all);
 }
 
@@ -399,25 +429,24 @@ void sigtstp_handler(int sig)
     int wstatus; // 종료상태
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-    Sio_puts("in sigtstp handler!\n");
+    Sio_puts("in sigtstp handler! ");
     // Sio_putl(gpid_now); // 명령 실행 할때는 gpid 가 0이라서 문제가 생긴다 fg 일 때
+    Sio_putl(gpid_now);
+    Sio_puts("\n");
     if (gpid_now)
     {
         Kill(-gpid_now, SIGTSTP);
-        add_job(gpid_now, STOPPED, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
     }
-    else if (fg_now)
-    {
-        Sio_puts("fg is working now!\n");
-        Sio_putl(gpid_now);
-        Kill(-gpid_now, SIGTSTP);
-    }
-    gpid_now = 0; // 다시 무효화
+    // gpid_now = 0; // 다시 무효화
     Sigprocmask(SIG_UNBLOCK, &mask_all, &prev_all);
 }
 
 void fg_bg_kill_finder(char **argv, int mod)
 {
+    sigset_t mask_one;
+    Sigemptyset(&mask_one);
+    Sigaddset(&mask_one, SIGCHLD);
+
     if (argv[1] == NULL)
     {
         printf("default option!\n");
@@ -427,7 +456,7 @@ void fg_bg_kill_finder(char **argv, int mod)
         // printf("percentage option number %d\n", argv[1][1]);
         if (argv[1][1] == '\0') // 기본 사양으로 돌아가게한다.
         {
-            printf("default function!\n");
+            printf("put the right number!\n");
         }
         else if (isdigit(argv[1][1]))
         {
@@ -436,7 +465,7 @@ void fg_bg_kill_finder(char **argv, int mod)
             int wstatus;
             // printf("the idx number is %s!\n", argv[1] + 1);
             // printf("the idx number is %d!\n", idx);
-            if (find_job(idx, -1, INDEX) != -1) // 찾았으면 ㄱㄱ
+            if (find_job(idx, -1, INDEX) != NULL) // 찾았으면 ㄱㄱ
             {
                 // printf("found the job!\n");
                 switch (mod)
@@ -445,47 +474,26 @@ void fg_bg_kill_finder(char **argv, int mod)
                     // fprintf(stdout, "here comes the fg command! %d\n", find_job(idx, -1, INDEX));
                     signal(SIGTTIN, SIG_IGN);
                     signal(SIGTTOU, SIG_IGN);
-
+                    Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
                     // tcsetpgrp(STDIN_FILENO, find_job(idx, -1, INDEX));
-                    kill(-find_job(idx, -1, INDEX), SIGCONT);
-                    fprintf(stdout, "process fg id: %d getpgrp() : %d\n", find_job(idx, -1, INDEX), getpgrp());
+                    Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
+                    gpid_now = find_job(idx, -1, INDEX)->pid;
+                    change_job(idx, -1, RUNNING, true, INDEX);
+                    // fprintf(stdout, "process fg id: %d getpgrp() : %d\n", find_job(idx, -1, INDEX)->pid, getpgrp());
+                    wait_fg(find_job(idx, -1, INDEX)->pid);
                     tcsetpgrp(STDIN_FILENO, getpgrp());
-                    gpid_now = find_job(idx, -1, INDEX);
-                    fg_gpid_now = find_job(idx, -1, INDEX);
-                    fg_now = true;
-                    while ((pid = waitpid(-1, &wstatus, WUNTRACED | WUNTRACED)) > 0)
-                    { /* Reap child */
-                        fprintf(stdout, "in while loop 445\n");
-                        if (WIFEXITED(wstatus))
-                        {
-                            if (find_job(-1, pid, PID) != -1)
-                                delete_job(-1, pid, PID); /* Delete the child from the job list */
-                        }
-                        else if (WIFSIGNALED(wstatus))
-                        {
-                            //시그널에 의해서 종료가 되었을 때
-                            fprintf(stdout, "ended\n");
-                            if (find_job(-1, pid, PID) != -1)
-                                delete_job(-1, pid, PID); /* Delete the child from the job list */
-                        }
-                        else if (WIFSTOPPED(wstatus))
-                        {
-                            fprintf(stdout, "ctrl + z pressed! but not in handler!\n");
-                            break;
-                        }
-                    }
-                    fg_now = false;
-                    fprintf(stdout, "line 462!\n");
-                    // safe to end protection from signals
+                    Sigprocmask(SIG_BLOCK, &mask_one, NULL);
+                    // fprintf(stdout, "line 462!\n");
+                    //  safe to end protection from signals
                     signal(SIGTTIN, SIG_DFL);
                     signal(SIGTTOU, SIG_DFL);
                     // Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고 sigcont 신호 보내주기
                     break;
                 case BG:
-                    Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
+                    Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
                     break;
                 case KILL:
-                    Kill(-change_job(idx, DONE), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
+                    Kill(-change_job(idx, -1, DONE, false, INDEX), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
                     break;
                 }
             }
@@ -499,4 +507,27 @@ void fg_bg_kill_finder(char **argv, int mod)
     {
         printf("undefined!\n");
     }
+}
+
+void wait_fg(int pid)
+{
+    printf("in wait_fg function! now\n");
+    JOB_INFO *target = find_job(-1, pid, PID);
+    // assert(index != -1); // 못찾으면 에러뜬다!
+
+    if (target == NULL)
+        return;
+
+    while (target != NULL && target->fgFlag == true) // 작업을 못찾거나 fgFlag 가 flase이면 떠난다.
+    {
+        printf("\
+job status\n\
+cmd : %sfgFlag : %d\n\
+idx: %d\n\
+pid: %d\n",
+               target->cmd, target->fgFlag, target->idx, target->pid);
+        sleep(1);
+        target = find_job(-1, pid, PID);
+    }
+    return;
 }

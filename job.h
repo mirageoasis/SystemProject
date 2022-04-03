@@ -34,13 +34,14 @@ typedef struct JOB_INFO
     int idx;
     int status;
     char cmd[MAXLINE]; // maxline 이다 csapp에 정의되어있는
+    bool fgFlag;
     struct JOB_INFO *next;
 } JOB_INFO;
 
-void add_job(int pid, int status, char *cmd_line);
 void job_list();
-pid_t find_job(int idx, pid_t pid, int mod);
-pid_t change_job(int idx, int mod);
+void add_job(int pid, int status, int fgFlag, char *cmd_line);
+JOB_INFO *find_job(int idx, pid_t pid, int mod);
+pid_t change_job(int idx, int pid, int status, int fgFlag, int mod);
 int delete_job(int idx, pid_t pid, int mod);
 
 extern JOB_INFO *head;

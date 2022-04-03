@@ -25,20 +25,20 @@ void job_list()
     }
 }
 
-void add_job(int pid, int status, char *cmd_line)
+void add_job(int pid, int status, int fgFlag, char *cmd_line)
 {
     /*프로세스가 하나도 추가가 되지 않았다면*/
     JOB_INFO *pnew = (JOB_INFO *)malloc(sizeof(JOB_INFO));
+    pnew->pid = pid;
+    pnew->status = status;
+    pnew->fgFlag = fgFlag;
+    strcpy(pnew->cmd, cmd_line);
+    pnew->next = NULL;
     assert(cmd_line != NULL);
     assert(pnew != NULL);
     if (head == NULL)
     {
         pnew->idx = 1;
-        pnew->pid = pid;
-        pnew->status = status;
-        pnew->next = NULL;
-        strcpy(pnew->cmd, cmd_line);
-
         head = pnew;
     }
     else
@@ -55,10 +55,6 @@ void add_job(int pid, int status, char *cmd_line)
         }
         /*pnew 정보 입력*/
         pnew->idx = (prev->idx) + 1;
-        pnew->pid = pid;
-        pnew->status = status;
-        strcpy(pnew->cmd, cmd_line);
-        pnew->next = NULL;
         /*pnew 이전 친구 next 설정하기*/
         prev->next = pnew;
     }
@@ -66,35 +62,50 @@ void add_job(int pid, int status, char *cmd_line)
     fprintf(stdout, "[%d] %d\n", pnew->idx, pid);
 }
 
-pid_t find_job(int idx, pid_t pid, int mod)
+JOB_INFO *find_job(int idx, pid_t pid, int mod)
 {
     JOB_INFO *temp = head;
     while (temp != NULL)
     {
         if (mod == INDEX)
             if (idx == temp->idx)
-                return temp->pid;
+                return temp;
         if (mod == PID)
             if (pid == temp->pid)
-                return temp->pid;
+                return temp;
 
         temp = temp->next;
     }
 
-    return -1;
+    return NULL;
 }
 
-pid_t change_job(int idx, int status)
+pid_t change_job(int idx, int pid, int status, int fgFlag, int mod)
 {
     JOB_INFO *temp = head;
+
     while (temp != NULL)
     {
-        if (idx == temp->idx)
-        {
-            fprintf(stdout, "changed idx %d\n", idx);
-            temp->status = status;
-            return temp->pid;
-        }
+        if (mod == INDEX)
+            if (idx == temp->idx)
+            {
+                Sio_puts("changed idx: ");
+                Sio_putl(temp->idx);
+                Sio_puts("\n");
+                temp->status = status;
+                temp->fgFlag = fgFlag;
+                return temp->pid;
+            }
+        if (mod == PID)
+            if (pid == temp->pid)
+            {
+                Sio_puts("changed idx: ");
+                Sio_putl(temp->idx);
+                Sio_puts("\n");
+                temp->status = status;
+                temp->fgFlag = fgFlag;
+                return temp->pid;
+            }
         temp = temp->next;
     }
 
@@ -117,16 +128,17 @@ int delete_job(int idx, pid_t pid, int mod)
         prev = cur; // 전에꺼 저장
         cur = cur->next;
     }
-    Sio_puts("\n[");
+    Sio_puts("deleted to job!\n");
+    Sio_puts("[");
     Sio_putl(cur->idx);
     Sio_puts("] pid ");
     Sio_putl(cur->pid);
     Sio_puts("      ");
     Sio_puts(cur->cmd);
-    Sio_puts("> ");
     if (cur == head)
     {
-        head = cur->next;
+        head = cur->next; // NULL로 만드는거
+        Sio_puts("head!\n");
         free(cur);
     }
     else
