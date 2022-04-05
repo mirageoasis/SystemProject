@@ -17,13 +17,11 @@ void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *st
 void sigchild_handler(int sig);
 void sigint_handler(int sig);
 void sigtstp_handler(int sig);
-// Signal(SIGTTIN, sigIn_handler); // set handler for SIGTSTP
-// Signal(SIGTTOU, sigTou_handler); // set handler for SIGTSTP
-void sigIn_handler(int sig);
-void sigTou_handler(int sig);
 
 void fg_bg_kill_finder(char **argv, int mod);
 void wait_fg(int pid);
+
+void pipe_space(char *buf);
 
 char cmdline[MAXLINE]; /* Command line */
 JOB_INFO *head = NULL;
@@ -40,7 +38,7 @@ int main()
 {
 
     Signal(SIGCHLD, sigchild_handler);
-    // Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
+    Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
     Signal(SIGTSTP, sigtstp_handler); // set handler for SIGTSTP
     // Signal(SIGTTIN, sigIn_handler);   // set handler for SIGTSTP
     //   Signal(SIGTTOU, sigTou_handler);  // set handler for SIGTSTP
@@ -87,19 +85,42 @@ void eval(char *cmdline, bool got_piped, int step)
     pair_clear(buf, '"'); // clear ""
     pair_clear(buf, 39);  // clear '
     pair_clear(buf, '`'); // clear '
+    pipe_space(buf);
+    // for (int i = 0; i < strlen(buf); i++)
+    //     fprintf(stdout, "%c", buf[i]);
+    // fprintf(stdout, "\n");
+
     bg = parseline(buf, argv);
     if (argv[0] == NULL)
         return; /* Ignore empty lines */
 
     for (argc = 0; argv[argc] != NULL; argc++)
-    { /*pipe 유무를 찾아주는 반복문*/
+    { /*pipe 유무를 less 유무 -1 의 유무 판단*/
         if (!strcmp(argv[argc], "|"))
             pipeFlag = true;
         if (!strcmp(argv[argc], "less"))
             lessFlag = true;
+        for (int i = 0; i < strlen(argv[argc]); i++)
+        {
+            if (argv[argc][i] == -1)
+                argv[argc][i] = ' ';
+            // fprintf(stdout, "%c", argv[argc][i]);
+        }
+        for (int i = 0; i < strlen(argv[argc]); i++)
+        {
+            if (argv[argc][i] == -1)
+                argv[argc][i] = ' ';
+            // fprintf(stdout, "%c", argv[argc][i]);
+        }
+        // fprintf(stdout, "\n");
     }
 
-    // fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
+    // for (int i = 0; argv[i] != NULL; i++)
+    //     fprintf(stdout, "%s\n", argv[i]);
+    // fprintf(stdout, "\n");
+
+    // exit(0);
+    //   fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
 
     if (argv[argc - 1][strlen(argv[argc - 1]) - 1] == '&')
     {
@@ -282,13 +303,14 @@ int pipe_running(char **argv, int starting_point)
     if (pipeFlag)
     {
         // less 있으면 sepgid 없에기
-        // if (setpgid(0, 0) < 0)
-        //    unix_error("error in setpgid on line 87!\n");
         //   fprintf(stdout, "pipe %d arg is front %s back %s\n", pipeFlag, argv[prev_starting_point], argv[starting_point]);
         //   fprintf(stdout, "starting number is %d next number is %d\n", prev_starting_point, starting_point);
         if ((pid = Fork()) == 0)
         {
             /* Child runs user job */
+            if (setpgid(0, 0) < 0)
+                unix_error("error in setpgid on line 87!\n");
+
             close(fd[0]);
             dup2(fd[1], STDOUT_FILENO);
             char dest[128];
@@ -311,6 +333,7 @@ int pipe_running(char **argv, int starting_point)
         }
         else
         {
+            // fprintf(stdout, "child process %d\n", pid);
             /* Parent waits for foreground job to terminate */
             close(fd[1]);
             dup2(fd[0], STDIN_FILENO);
@@ -381,11 +404,16 @@ int pair_clear(char *buf, char c)
         {
             temp[count % 2] = i;
             count++;
-            if (!(count % 2))
-            { // pair가 맞을 때
+            if (!(count % 2)) // 짝수
+            {                 // pair가 맞을 때
                 buf[temp[0]] = ' ';
                 buf[temp[1]] = ' ';
             }
+        }
+        else if (count % 2) // 홀수인데 안끝나면
+        {
+            if (buf[i] == ' ')
+                buf[i] = -1; // 임시로 이렇게 한거
         }
     }
 }
@@ -424,12 +452,12 @@ void sigchild_handler(int sig)
         }
         else if (WIFSTOPPED(wstatus))
         {
-            Sio_puts("in WIFSTOPPED!\n");
-            Sio_puts("dealing with signal :");
-            Sio_putl(pid);
-            Sio_puts("\n");
-            // Sio_putl(WSTOPSIG(wstatus));
+            // Sio_puts("in WIFSTOPPED!\n");
+            // Sio_puts("dealing with signal :");
+            // Sio_putl(pid);
             // Sio_puts("\n");
+            //  Sio_putl(WSTOPSIG(wstatus));
+            //  Sio_puts("\n");
             //이거는 존재 여부 확인하고 하자 무지성은 ㄴㄴ
             if (find_job(-1, pid, PID) != NULL)
             { // 존재한다면 작업의 상태 변환
@@ -455,7 +483,7 @@ void sigint_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
-    Sio_puts("now in sigint handler!\n");
+    // Sio_puts("now in sigint handler!\n");
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
     // 아무것도 삭제할꺼 없을 때는 어캐함? 일 끝내고 온거는 해당 안되네 ;; 대충 해결 한 듯 ㅇㅇ
@@ -475,14 +503,14 @@ void sigtstp_handler(int sig)
     int wstatus; // 종료상태
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-    Sio_puts("in sigtstp handler!\n");
-    Sio_putl(gpid_now); // 명령 실행 할때는 gpid 가 0이라서 문제가 생긴다 fg 일 때
-    Sio_puts("\n");
+    // Sio_puts("in sigtstp handler!\n");
+    // Sio_putl(gpid_now); // 명령 실행 할때는 gpid 가 0이라서 문제가 생긴다 fg 일 때
+    // Sio_puts("\n");
     if (gpid_now)
     {
-        Sio_puts("now in gpid_fixing!\n");
-        Sio_putl(gpid_now);
-        Sio_puts("\n");
+        // Sio_puts("now in gpid_fixing!\n");
+        // Sio_putl(gpid_now);
+        // Sio_puts("\n");
         Kill(-gpid_now, SIGTSTP);
     }
     // gpid_now = 0; // 다시 무효화
@@ -520,36 +548,26 @@ void fg_bg_kill_finder(char **argv, int mod)
                 {
                 case FG:
                     // fprintf(stdout, "here comes the fg command! %d\n", find_job(idx, -1, INDEX));
-                    // signal(SIGTTIN, SIG_IGN);
-                    // signal(SIGTTOU, SIG_IGN);
                     Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
-                    // tcsetpgrp(STDIN_FILENO, find_job(idx, -1, INDEX));
                     Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
                     change_job(idx, -1, RUNNING, true, INDEX);
                     gpid_now = find_job(idx, -1, INDEX)->pid;
                     // fprintf(stdout, "process fg id: %d getpgrp() : %d\n", find_job(idx, -1, INDEX)->pid, getpgrp());
                     wait_fg(find_job(idx, -1, INDEX)->pid);
-                    // tcsetpgrp(STDIN_FILENO, getpgrp());
                     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
                     // fprintf(stdout, "line 462!\n");
-                    //  safe to end protection from signals
-                    // signal(SIGTTIN, SIG_DFL);
-                    // signal(SIGTTOU, SIG_DFL);
-                    // Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고 sigcont 신호 보내주기
                     break;
                 case BG:
-                    // Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
                     Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
                     break;
                 case KILL:
                     Kill(-change_job(idx, -1, DONE, false, INDEX), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
-
                     break;
                 }
             }
             else
             {
-                printf("no such job!\n"); // 모르면 ㄴㄴ
+                printf("No such job!\n"); // 모르면 ㄴㄴ
             }
         }
     }
@@ -580,4 +598,32 @@ void wait_fg(int pid)
         target = find_job(-1, pid, PID);
     }
     return;
+}
+
+void pipe_space(char *buf)
+{
+    int quoteFlag = 0;
+    char temp[MAXLINE];
+
+    for (int i = 0; i < strlen(buf); i++)
+    {
+
+        if (buf[i] == '\'' || buf[i] == '"' || buf[i] == '`')
+        {
+            quoteFlag++;
+            continue;
+        }
+
+        if (!(quoteFlag % 2)) // quote가 홀수가 아닌 케이스(즉 따옴표 사이에 없는 케이스)
+        {
+            if (buf[i] == '|' && (buf[i - 1] != ' ' || buf[i + 1] != ' '))
+            {
+                strcpy(temp, &buf[i + 1]);
+                buf[i] = ' ';
+                buf[i + 1] = '|';
+                buf[i + 2] = ' ';
+                strcpy(&buf[i + 3], temp);
+            }
+        }
+    }
 }
