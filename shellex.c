@@ -17,6 +17,10 @@ void find_pipe(char **argv, char *front[], char *back[], bool *pipeFlag, int *st
 void sigchild_handler(int sig);
 void sigint_handler(int sig);
 void sigtstp_handler(int sig);
+// Signal(SIGTTIN, sigIn_handler); // set handler for SIGTSTP
+// Signal(SIGTTOU, sigTou_handler); // set handler for SIGTSTP
+void sigIn_handler(int sig);
+void sigTou_handler(int sig);
 
 void fg_bg_kill_finder(char **argv, int mod);
 void wait_fg(int pid);
@@ -36,8 +40,10 @@ int main()
 {
 
     Signal(SIGCHLD, sigchild_handler);
-    Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
+    // Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
     Signal(SIGTSTP, sigtstp_handler); // set handler for SIGTSTP
+    // Signal(SIGTTIN, sigIn_handler);   // set handler for SIGTSTP
+    //   Signal(SIGTTOU, sigTou_handler);  // set handler for SIGTSTP
 
     while (1)
     {
@@ -66,15 +72,18 @@ void eval(char *cmdline, bool got_piped, int step)
     int status;            /*자식 프로세스 종료 여부 확인*/
     char *next_command;    /*(일단 파이프 용도로 만듬)다음에 넘겨줄 명령어*/
     bool pipeFlag = false; /*파이프인지 여부를 판단*/
+    bool lessFlag = false;
     int backtick_flag[2], small_quote_flag[2], big_quote_flag[2];
     sigset_t mask_all, mask_one, prev_one;
 
     // Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
+    Sigaddset(&mask_one, SIGTTOU);
 
     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
-
+    // Signal(SIGTTOU, SIG_IGN);
+    //  Signal(SIGTTIN, SIG_IGN);
     strcpy(buf, cmdline);
 
     pair_clear(buf, '"'); // clear ""
@@ -84,9 +93,13 @@ void eval(char *cmdline, bool got_piped, int step)
     if (argv[0] == NULL)
         return; /* Ignore empty lines */
 
-    for (argc = 0; argv[argc] != NULL; argc++) /*pipe 유무를 찾아주는 반복문*/
+    for (argc = 0; argv[argc] != NULL; argc++)
+    { /*pipe 유무를 찾아주는 반복문*/
         if (!strcmp(argv[argc], "|"))
             pipeFlag = true;
+        if (!strcmp(argv[argc], "less"))
+            lessFlag = true;
+    }
 
     // fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
 
@@ -101,13 +114,17 @@ void eval(char *cmdline, bool got_piped, int step)
         // printf("hi my name is !\n");
         if ((pid = Fork()) == 0)
         {
-            if (setpgid(0, 0) == -1)
-                unix_error("error in setpgid on line 87!\n");
-            // printf("running the job %s\n", argv[0]);
+            if (!lessFlag && !bg)
+                if (setpgid(0, 0) == -1)
+                    unix_error("error in setpgid on line 87!\n");
+            //   printf("running the job %s\n", argv[0]);
             /* Child runs user job */
             char dest[128];
+            char dest1[128];
             strcpy(dest, "/bin/");
+            strcpy(dest1, "/usr/bin/");
             strcat(dest, argv[0]);
+            strcat(dest1, argv[0]);
 
             if (pipeFlag)
             {
@@ -115,16 +132,19 @@ void eval(char *cmdline, bool got_piped, int step)
             }
             else if (execve(dest, argv, environ) < 0) // 일단 임시방편
             {                                         // ex) /bin/ls ls -al &
-                printf("%s Command not found.\n", argv[0]);
-                exit(0);
+                if (execve(dest1, argv, environ) < 0)
+                {
+                    printf("%s Command not found.\n", argv[0]);
+                    exit(0);
+                }
             }
         }
         else
         {
             /* Parent waits for foreground job to terminate */
+            gpid_now = pid;
             if (!bg)
             {
-                gpid_now = pid;
                 // printf("now in final bg!\n");
                 add_job(pid, RUNNING, true, cmdline);
                 Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
@@ -132,12 +152,15 @@ void eval(char *cmdline, bool got_piped, int step)
                 // fprintf(stdout, "parent pid is %d\n", getpid());
                 // fprintf(stdout, "pid of child  is %d\n", pid);
                 // fprintf(stdout, "gpid of child is %d\n", gpid_now);
-                // fprintf(stdout, "passed test on Wait on line 119 on eval func\n");
-                // gpid_now = 0;
-                //   fprintf(stdout, "eval caculated!\n");
+                //  fprintf(stdout, "passed test on Wait on line 119 on eval func\n");
+                //  gpid_now = 0;
+                //    fprintf(stdout, "eval caculated!\n");
             }
             else // when there is background process!
             {
+                // fprintf(stdout, "parent pid is %d\n", getpid());
+                // fprintf(stdout, "pid of child  is %d\n", pid);
+                // fprintf(stdout, "gpid of child is %d\n", gpid_now);
                 add_job(pid, RUNNING, false, cmdline);
                 // fprintf(stdout, "%d %s", pid, cmdline);
             }
@@ -145,6 +168,8 @@ void eval(char *cmdline, bool got_piped, int step)
     }
     // fprintf(stdout, "this is the end\n");
     Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
+    // Signal(SIGTTOU, SIG_DFL);
+    //  Signal(SIGTTIN, SIG_DFL);
     return;
 }
 
@@ -257,8 +282,11 @@ int pipe_running(char **argv, int starting_point)
     find_pipe(argv, front, back, &pipeFlag, &starting_point);
     if (pipeFlag)
     {
-        // fprintf(stdout, "pipe %d arg is front %s back %s\n", pipeFlag, argv[prev_starting_point], argv[starting_point]);
-        // fprintf(stdout, "starting number is %d next number is %d\n", prev_starting_point, starting_point);
+        // less 있으면 sepgid 없에기
+        // if (setpgid(0, 0) < 0)
+        //    unix_error("error in setpgid on line 87!\n");
+        //   fprintf(stdout, "pipe %d arg is front %s back %s\n", pipeFlag, argv[prev_starting_point], argv[starting_point]);
+        //   fprintf(stdout, "starting number is %d next number is %d\n", prev_starting_point, starting_point);
         if ((pid = Fork()) == 0)
         {
             /* Child runs user job */
@@ -364,7 +392,9 @@ void sigchild_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
+
     // Sio_puts("now in sigchild handler!\n");
+    // Sio_puts("gpid_now is non-zero!\n");
     Sigfillset(&mask_all);
     while ((pid = waitpid(-1, &wstatus, WNOHANG | WUNTRACED)) > 0)
     { /* Reap child */
@@ -394,16 +424,18 @@ void sigchild_handler(int sig)
             // Sio_puts("dealing with signal :");
             // Sio_putl(pid);
             // Sio_puts("\n");
+            // Sio_putl(WSTOPSIG(wstatus));
+            // Sio_puts("\n");
             //이거는 존재 여부 확인하고 하자 무지성은 ㄴㄴ
             if (find_job(-1, pid, PID) != NULL)
             { // 존재한다면 작업의 상태 변환
                 // Sio_puts("already exists!\n");
-                assert(change_job(-1, gpid_now, STOPPED, false, PID) != -1);
+                assert(change_job(-1, pid, STOPPED, false, PID) != -1);
             }
             else
             { // 존재하지 않으면 추가
                 // Sio_puts("not exists!\n");
-                add_job(gpid_now, STOPPED, false, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
+                add_job(pid, STOPPED, false, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
             }
         }
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
@@ -419,6 +451,7 @@ void sigint_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
+    Sio_puts("now in sigint handler!\n");
     Sigfillset(&mask_all);
     Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
     // 아무것도 삭제할꺼 없을 때는 어캐함? 일 끝내고 온거는 해당 안되네 ;; 대충 해결 한 듯 ㅇㅇ
@@ -436,18 +469,24 @@ void sigtstp_handler(int sig)
     sigset_t mask_all, prev_all;
     pid_t pid;   // pid
     int wstatus; // 종료상태
-    Sigfillset(&mask_all);
-    Sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-    /// Sio_puts("in sigtstp handler! ");
+    Sio_puts("in sigtstp handler! ");
     // Sio_putl(gpid_now); // 명령 실행 할때는 gpid 가 0이라서 문제가 생긴다 fg 일 때
-    // Sio_putl(gpid_now);
-    // Sio_puts("\n");
+    Sio_putl(gpid_now);
+    Sio_puts("\n");
     if (gpid_now)
     {
         Kill(-gpid_now, SIGTSTP);
     }
     // gpid_now = 0; // 다시 무효화
-    Sigprocmask(SIG_UNBLOCK, &mask_all, &prev_all);
+}
+
+void sigIn_handler(int sig)
+{
+    Sio_puts("now in sigIn_handler");
+}
+void sigTou_handler(int sig)
+{
+    Sio_puts("now in sigstp_handler");
 }
 
 void fg_bg_kill_finder(char **argv, int mod)
@@ -481,28 +520,30 @@ void fg_bg_kill_finder(char **argv, int mod)
                 {
                 case FG:
                     // fprintf(stdout, "here comes the fg command! %d\n", find_job(idx, -1, INDEX));
-                    signal(SIGTTIN, SIG_IGN);
-                    signal(SIGTTOU, SIG_IGN);
+                    // signal(SIGTTIN, SIG_IGN);
+                    // signal(SIGTTOU, SIG_IGN);
                     Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
                     // tcsetpgrp(STDIN_FILENO, find_job(idx, -1, INDEX));
                     Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
-                    gpid_now = find_job(idx, -1, INDEX)->pid;
                     change_job(idx, -1, RUNNING, true, INDEX);
+                    gpid_now = find_job(idx, -1, INDEX)->pid;
                     // fprintf(stdout, "process fg id: %d getpgrp() : %d\n", find_job(idx, -1, INDEX)->pid, getpgrp());
                     wait_fg(find_job(idx, -1, INDEX)->pid);
-                    tcsetpgrp(STDIN_FILENO, getpgrp());
+                    // tcsetpgrp(STDIN_FILENO, getpgrp());
                     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
                     // fprintf(stdout, "line 462!\n");
                     //  safe to end protection from signals
-                    signal(SIGTTIN, SIG_DFL);
-                    signal(SIGTTOU, SIG_DFL);
+                    // signal(SIGTTIN, SIG_DFL);
+                    // signal(SIGTTOU, SIG_DFL);
                     // Kill(-change_job(idx, RUNNING), SIGCONT); // 링크드 리스트 내에서 바꿔주고 sigcont 신호 보내주기
                     break;
                 case BG:
+                    Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
                     Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
                     break;
                 case KILL:
                     Kill(-change_job(idx, -1, DONE, false, INDEX), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
+
                     break;
                 }
             }

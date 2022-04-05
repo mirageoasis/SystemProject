@@ -59,11 +59,11 @@ void add_job(int pid, int status, int fgFlag, char *cmd_line)
         prev->next = pnew;
     }
 
-    // Sio_puts("[");
-    // Sio_putl(pnew->idx);
-    // Sio_puts("]");
-    // Sio_putl(pid);
-    // Sio_puts("\n");
+    Sio_puts("[");
+    Sio_putl(pnew->idx);
+    Sio_puts("]");
+    Sio_putl(pid);
+    Sio_puts("\n");
 }
 
 JOB_INFO *find_job(int idx, pid_t pid, int mod)
@@ -133,12 +133,12 @@ int delete_job(int idx, pid_t pid, int mod)
         cur = cur->next;
     }
     // Sio_puts("deleted to job!\n");
-    Sio_puts("[");
-    Sio_putl(cur->idx);
-    Sio_puts("] pid ");
-    Sio_putl(cur->pid);
-    Sio_puts("      ");
-    Sio_puts(cur->cmd);
+    // Sio_puts("[");
+    // Sio_putl(cur->idx);
+    // Sio_puts("] pid ");
+    // Sio_putl(cur->pid);
+    // Sio_puts("      ");
+    // Sio_puts(cur->cmd);
     if (cur == head)
     {
         head = cur->next; // NULL로 만드는거나
