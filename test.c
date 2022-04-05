@@ -2,6 +2,7 @@
 
 int main()
 {
-    printf("wowo\n");
+    while (1)
+        ;
     return 0;
 }

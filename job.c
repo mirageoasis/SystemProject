@@ -93,9 +93,9 @@ pid_t change_job(int idx, int pid, int status, int fgFlag, int mod)
         if (mod == INDEX)
             if (idx == temp->idx)
             {
-                // Sio_puts("changed idx: ");
-                // Sio_putl(temp->idx);
-                // Sio_puts("\n");
+                Sio_puts("changed idx: ");
+                Sio_putl(temp->idx);
+                Sio_puts("\n");
                 temp->status = status;
                 temp->fgFlag = fgFlag;
                 return temp->pid;
@@ -103,9 +103,9 @@ pid_t change_job(int idx, int pid, int status, int fgFlag, int mod)
         if (mod == PID)
             if (pid == temp->pid)
             {
-                // Sio_puts("changed idx: ");
-                // Sio_putl(temp->idx);
-                // Sio_puts("\n");
+                Sio_puts("changed idx: ");
+                Sio_putl(temp->idx);
+                Sio_puts("\n");
                 temp->status = status;
                 temp->fgFlag = fgFlag;
                 return temp->pid;
