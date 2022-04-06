@@ -153,3 +153,17 @@ int delete_job(int idx, pid_t pid, int mod)
 
     return 0;
 }
+
+void clear_job()
+{
+    JOB_INFO *cur = head;
+    JOB_INFO *prev;
+
+    while (cur != NULL)
+    {
+        prev = cur;
+        cur = cur->next;
+        // Kill();
+        free(prev);
+    }
+}

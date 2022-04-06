@@ -40,6 +40,7 @@ typedef struct JOB_INFO
 
 void job_list();
 void add_job(int pid, int status, int fgFlag, char *cmd_line);
+void clear_job();
 JOB_INFO *find_job(int idx, pid_t pid, int mod);
 pid_t change_job(int idx, int pid, int status, int fgFlag, int mod);
 int delete_job(int idx, pid_t pid, int mod);

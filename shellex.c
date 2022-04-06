@@ -82,10 +82,10 @@ void eval(char *cmdline, bool got_piped, int step)
     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
     strcpy(buf, cmdline);
 
+    pipe_space(buf);
     pair_clear(buf, '"'); // clear ""
     pair_clear(buf, 39);  // clear '
     pair_clear(buf, '`'); // clear '
-    pipe_space(buf);
     // for (int i = 0; i < strlen(buf); i++)
     //     fprintf(stdout, "%c", buf[i]);
     // fprintf(stdout, "\n");
@@ -115,9 +115,9 @@ void eval(char *cmdline, bool got_piped, int step)
         // fprintf(stdout, "\n");
     }
 
-    // for (int i = 0; argv[i] != NULL; i++)
-    //     fprintf(stdout, "%s\n", argv[i]);
-    // fprintf(stdout, "\n");
+    for (int i = 0; argv[i] != NULL; i++)
+        fprintf(stdout, "%s\n", argv[i]);
+    fprintf(stdout, "\n");
 
     // exit(0);
     //   fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
@@ -228,8 +228,11 @@ int builtin_command(char **argv)
         fg_bg_kill_finder(argv, KILL);
         return 1;
     }
-    else if (!strcmp(argv[0], "exit")) /* quit command */
+    else if (!strcmp(argv[0], "exit"))
+    { /* quit command */
+        clear_job();
         exit(0);
+    }
     else if (!strcmp(argv[0], "&")) /* Ignore singleton & */
         return 1;
     return 0; /* Not a builtin command */
