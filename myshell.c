@@ -1,9 +1,5 @@
 /* $begin shellmain */
-#include "csapp.h"
-#include "mycd.h"
-#include "job.h"
-#include "signal_handler.h"
-#include <errno.h>
+#include "myshell.h"
 #define MAXARGS 128
 
 /* Function prototypes */

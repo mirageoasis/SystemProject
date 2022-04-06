@@ -1,12 +1,12 @@
 CC = gcc
-CFLAGS = -g
+CFLAGS = -Og
 LDLIBS = -lpthread
 
-PROGS = shellex
+PROGS = myshell
 
 all: $(PROGS)
 
-shellex: shellex.c csapp.c mycd.c job.c
+myshell: myshell.c csapp.c mycd.c job.c
 
 clean:
 	rm -rf *~ $(PROGS)
