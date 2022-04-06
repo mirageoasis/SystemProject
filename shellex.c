@@ -115,9 +115,9 @@ void eval(char *cmdline, bool got_piped, int step)
         // fprintf(stdout, "\n");
     }
 
-    for (int i = 0; argv[i] != NULL; i++)
-        fprintf(stdout, "%s\n", argv[i]);
-    fprintf(stdout, "\n");
+    // for (int i = 0; argv[i] != NULL; i++)
+    //     fprintf(stdout, "%s\n", argv[i]);
+    // fprintf(stdout, "\n");
 
     // exit(0);
     //   fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
@@ -198,9 +198,7 @@ int builtin_command(char **argv)
 {
     if (strcmp("cd", argv[0]) == 0) // cd 인 경우 포함해서
     {
-        int my_cd_return = my_cd(argv);
-
-        if (my_cd_return != 0)
+        if (my_cd(argv) != 0)
             fprintf(stdout, "error has happend in my_cd function!\n");
 
         return 1;
@@ -230,6 +228,12 @@ int builtin_command(char **argv)
     }
     else if (!strcmp(argv[0], "exit"))
     { /* quit command */
+        sigset_t mask_one;
+
+        Sigemptyset(&mask_one);
+        Sigaddset(&mask_one, SIGCHLD);
+
+        Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
         clear_job();
         exit(0);
     }
@@ -528,40 +532,46 @@ void fg_bg_kill_finder(char **argv, int mod)
 
     if (argv[1] == NULL)
     {
-        printf("default option!\n");
+        fprintf(stdout, "please put right options!\n");
     }
     else if (argv[1][0] == '%')
     {
         // printf("percentage option number %d\n", argv[1][1]);
         if (argv[1][1] == '\0') // 기본 사양으로 돌아가게한다.
         {
-            printf("put the right number!\n");
+            fprintf(stdout, "put a number!\n");
         }
         else if (isdigit(argv[1][1]))
         {
             int idx = atoi(argv[1] + 1);
             pid_t pid;
-            int wstatus;
+            JOB_INFO *temp;
             // printf("the idx number is %s!\n", argv[1] + 1);
             // printf("the idx number is %d!\n", idx);
-            if (find_job(idx, -1, INDEX) != NULL) // 찾았으면 ㄱㄱ
+
+            if ((temp = find_job(idx, -1, INDEX)) != NULL) // 찾았으면 ㄱㄱ
             {
-                // printf("found the job!\n");
                 switch (mod)
                 {
                 case FG:
                     // fprintf(stdout, "here comes the fg command! %d\n", find_job(idx, -1, INDEX));
                     Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
-                    Kill(-find_job(idx, -1, INDEX)->pid, SIGCONT);
+                    Kill(-temp->pid, SIGCONT);
                     change_job(idx, -1, RUNNING, true, INDEX);
-                    gpid_now = find_job(idx, -1, INDEX)->pid;
-                    // fprintf(stdout, "process fg id: %d getpgrp() : %d\n", find_job(idx, -1, INDEX)->pid, getpgrp());
-                    wait_fg(find_job(idx, -1, INDEX)->pid);
+                    gpid_now = temp->pid;
+                    fprintf(stdout, "[%d] running %s", temp->idx, temp->cmd);
+                    wait_fg(temp->pid);
                     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
                     // fprintf(stdout, "line 462!\n");
                     break;
                 case BG:
-                    Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
+                    if (temp->status != RUNNING)
+                    {
+                        Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
+                        fprintf(stdout, "[%d] running %s", temp->idx, temp->cmd);
+                    }
+                    else
+                        fprintf(stdout, "bg: job %d already in background\n", temp->idx);
                     break;
                 case KILL:
                     Kill(-change_job(idx, -1, DONE, false, INDEX), SIGKILL); // 링크드 리스트 내에서 바꿔주고 kill 신호 보내주기
@@ -570,7 +580,7 @@ void fg_bg_kill_finder(char **argv, int mod)
             }
             else
             {
-                printf("No such job!\n"); // 모르면 ㄴㄴ
+                printf("No such job\n"); // 모르면 ㄴㄴ
             }
         }
     }

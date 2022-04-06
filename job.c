@@ -59,11 +59,11 @@ void add_job(int pid, int status, int fgFlag, char *cmd_line)
         prev->next = pnew;
     }
 
-    Sio_puts("[");
-    Sio_putl(pnew->idx);
-    Sio_puts("]");
-    Sio_putl(pid);
-    Sio_puts("\n");
+    // Sio_puts("[");
+    // Sio_putl(pnew->idx);
+    // Sio_puts("]");
+    // Sio_putl(pid);
+    // Sio_puts("\n");
 }
 
 JOB_INFO *find_job(int idx, pid_t pid, int mod)
@@ -71,15 +71,16 @@ JOB_INFO *find_job(int idx, pid_t pid, int mod)
     JOB_INFO *temp = head;
     while (temp != NULL)
     {
+        // fprintf(stdout, "pid is %d compare %d\n", pid, temp->pid);
         if (mod == INDEX)
             if (idx == temp->idx)
                 return temp;
         if (mod == PID)
             if (pid == temp->pid)
                 return temp;
-
         temp = temp->next;
     }
+    // fprintf(stdout, "end of the road!\n");
 
     return NULL;
 }
@@ -132,13 +133,13 @@ int delete_job(int idx, pid_t pid, int mod)
         prev = cur; // 전에꺼 저장
         cur = cur->next;
     }
-    // Sio_puts("deleted to job!\n");
-    // Sio_puts("[");
-    // Sio_putl(cur->idx);
-    // Sio_puts("] pid ");
-    // Sio_putl(cur->pid);
-    // Sio_puts("      ");
-    // Sio_puts(cur->cmd);
+    // Sio_puts("deleted the job!\n");
+    //  Sio_puts("[");
+    //  Sio_putl(cur->idx);
+    //  Sio_puts("] pid ");
+    //  Sio_putl(cur->pid);
+    //  Sio_puts("      ");
+    //  Sio_puts(cur->cmd);
     if (cur == head)
     {
         head = cur->next; // NULL로 만드는거나
@@ -158,12 +159,20 @@ void clear_job()
 {
     JOB_INFO *cur = head;
     JOB_INFO *prev;
-
+    // fprintf(stdout, "now in clear job\n");
     while (cur != NULL)
     {
         prev = cur;
-        cur = cur->next;
-        // Kill();
-        free(prev);
+        cur = cur->next; // 넘어가고 뒤에 남겨진 친구가 삭제된다.
+        // fprintf(stdout, "dealing with the job %d\n", prev->pid);
+        if (find_job(-1, prev->pid, PID) != NULL)
+        {
+            // fprintf(stdout, "dealing with the job %d\n", prev->pid);
+            Kill(-prev->pid, SIGKILL);
+        }
+        else
+        {
+            // fprintf(stdout, "not found the job %d\n", prev->pid);
+        }
     }
 }

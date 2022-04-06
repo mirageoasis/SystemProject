@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <signal.h>
 
 #define MAXLINE 8192 /* Max text line length */
 
