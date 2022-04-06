@@ -73,7 +73,7 @@ void eval(char *cmdline, bool got_piped, int step)
     // Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
-    Sigaddset(&mask_one, SIGTTOU);
+    //Sigaddset(&mask_one, SIGTTOU);
 
     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
     strcpy(buf, cmdline);
@@ -428,7 +428,7 @@ void sigchild_handler(int sig)
     pid_t pid;   // pid
     int wstatus; // 종료상태
 
-    // Sio_puts("now in sigchild handler!\n");
+    //Sio_puts("now in sigchild handler!\n");
     // Sio_puts("gpid_now is non-zero!\n");
     Sigfillset(&mask_all);
     while ((pid = waitpid(-1, &wstatus, WNOHANG | WUNTRACED)) > 0)
@@ -446,7 +446,7 @@ void sigchild_handler(int sig)
         else if (WIFSIGNALED(wstatus))
         {
             //시그널에 의해서 종료가 되었을 때
-            // Sio_puts("in WIFSIGNALED!");
+            //Sio_puts("in WIFSIGNALED!");
             // Sio_puts("dealing with signal :");
             // Sio_putl(pid);
             // Sio_puts("\n");
@@ -555,7 +555,7 @@ void fg_bg_kill_finder(char **argv, int mod)
                     Kill(-temp->pid, SIGCONT);
                     change_job(idx, -1, RUNNING, true, INDEX);
                     gpid_now = temp->pid;
-                    fprintf(stdout, "[%d] running %s", temp->idx, temp->cmd);
+                    fprintf(stdout, "[%d] Running %s", temp->idx, temp->cmd);
                     wait_fg(temp->pid);
                     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
                     // fprintf(stdout, "line 462!\n");
@@ -564,7 +564,7 @@ void fg_bg_kill_finder(char **argv, int mod)
                     if (temp->status != RUNNING)
                     {
                         Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
-                        fprintf(stdout, "[%d] running %s", temp->idx, temp->cmd);
+                        fprintf(stdout, "[%d] Running %s", temp->idx, temp->cmd);
                     }
                     else
                         fprintf(stdout, "bg: job %d already in background\n", temp->idx);
