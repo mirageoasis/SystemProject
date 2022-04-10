@@ -19,7 +19,8 @@ void wait_fg(int pid);
 
 void pipe_space(char *buf);
 
-char cmdline[MAXLINE]; /* Command line */
+char cmdline[MAXLINE];         /* Command line */
+char cmd_for_handler[MAXLINE]; /* Command line */
 JOB_INFO *head = NULL;
 int gpid_now;
 
@@ -36,12 +37,12 @@ int main()
     Signal(SIGCHLD, sigchild_handler);
     Signal(SIGINT, sigint_handler);   // set handler for SIGINT // 일단 없에서 디버깅 용도로 사용한다.
     Signal(SIGTSTP, sigtstp_handler); // set handler for SIGTSTP
-    // Signal(SIGTTIN, sigIn_handler);   // set handler for SIGTSTP
-    //   Signal(SIGTTOU, sigTou_handler);  // set handler for SIGTSTP
 
     while (1)
     {
         /* Read */
+        for (int i = 0; i < MAXLINE; i++)
+            cmd_for_handler[i] = '\0';
         gpid_now = 0;
         printf("> ");
         fgets(cmdline, MAXLINE, stdin);
@@ -73,7 +74,7 @@ void eval(char *cmdline, bool got_piped, int step)
     // Sigfillset(&mask_all);
     Sigemptyset(&mask_one);
     Sigaddset(&mask_one, SIGCHLD);
-    //Sigaddset(&mask_one, SIGTTOU);
+    // Sigaddset(&mask_one, SIGTTOU);
 
     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
     strcpy(buf, cmdline);
@@ -110,11 +111,6 @@ void eval(char *cmdline, bool got_piped, int step)
         }
         // fprintf(stdout, "\n");
     }
-
-    // for (int i = 0; argv[i] != NULL; i++)
-    //     fprintf(stdout, "%s\n", argv[i]);
-    // fprintf(stdout, "\n");
-
     // exit(0);
     //   fprintf(stdout, "%c\n", argv[argc - 1][strlen(argv[argc - 1]) - 1]);
 
@@ -123,6 +119,23 @@ void eval(char *cmdline, bool got_piped, int step)
         bg = 1;
         argv[argc - 1][strlen(argv[argc - 1]) - 1] = '\0';
     }
+
+    // for (int i = 0; argv[i] != NULL; i++)
+    //     fprintf(stdout, "%s\n", argv[i]);
+    // fprintf(stdout, "\n");
+
+    if (argv[0] != NULL)
+    {
+        strcpy(cmd_for_handler, argv[0]);
+        // fprintf(stdout, "line 120 %s\n", cmd_for_handler);
+        for (int i = 1; argv[i] != NULL; i++)
+        {
+            // fprintf(stdout, "the argv is %s\n", argv[i]);
+            cmd_for_handler[strlen(cmd_for_handler)] = ' ';
+            strcpy(&(cmd_for_handler[strlen(cmd_for_handler)]), argv[i]);
+        }
+    }
+    // fprintf(stdout, "the cmd_for_handler is \"%s\n\"", cmd_for_handler);
 
     if (!builtin_command(argv))
     { // quit -> exit(0), & -> ignore, other -> run
@@ -164,7 +177,7 @@ void eval(char *cmdline, bool got_piped, int step)
             {
                 gpid_now = pid;
                 // printf("now in final bg!\n");
-                add_job(pid, RUNNING, true, cmdline);
+                add_job(pid, RUNNING, true, cmd_for_handler);
                 Sigprocmask(SIG_UNBLOCK, &mask_one, NULL);
                 wait_fg(pid);
                 // fprintf(stdout, "parent pid is %d\n", getpid());
@@ -179,7 +192,7 @@ void eval(char *cmdline, bool got_piped, int step)
                 // fprintf(stdout, "parent pid is %d\n", getpid());
                 // fprintf(stdout, "pid of child  is %d\n", pid);
                 // fprintf(stdout, "gpid of child is %d\n", gpid_now);
-                add_job(pid, RUNNING, false, cmdline);
+                add_job(pid, RUNNING, false, cmd_for_handler);
                 // fprintf(stdout, "%d %s", pid, cmdline);
             }
         }
@@ -428,8 +441,8 @@ void sigchild_handler(int sig)
     pid_t pid;   // pid
     int wstatus; // 종료상태
 
-    //Sio_puts("now in sigchild handler!\n");
-    // Sio_puts("gpid_now is non-zero!\n");
+    // Sio_puts("now in sigchild handler!\n");
+    //  Sio_puts("gpid_now is non-zero!\n");
     Sigfillset(&mask_all);
     while ((pid = waitpid(-1, &wstatus, WNOHANG | WUNTRACED)) > 0)
     { /* Reap child */
@@ -446,7 +459,7 @@ void sigchild_handler(int sig)
         else if (WIFSIGNALED(wstatus))
         {
             //시그널에 의해서 종료가 되었을 때
-            //Sio_puts("in WIFSIGNALED!");
+            // Sio_puts("in WIFSIGNALED!");
             // Sio_puts("dealing with signal :");
             // Sio_putl(pid);
             // Sio_puts("\n");
@@ -470,7 +483,7 @@ void sigchild_handler(int sig)
             else
             { // 존재하지 않으면 추가
                 // Sio_puts("not exists!\n");
-                add_job(pid, STOPPED, false, cmdline); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
+                add_job(pid, STOPPED, false, cmd_for_handler); // 다른 파일에 넣었더만 cmd_line의 주소가 제대로 안넘어감;;
             }
         }
         Sigprocmask(SIG_SETMASK, &prev_all, NULL);
@@ -555,7 +568,7 @@ void fg_bg_kill_finder(char **argv, int mod)
                     Kill(-temp->pid, SIGCONT);
                     change_job(idx, -1, RUNNING, true, INDEX);
                     gpid_now = temp->pid;
-                    fprintf(stdout, "[%d] Running %s", temp->idx, temp->cmd);
+                    fprintf(stdout, "[%d] Running %s\n", temp->idx, temp->cmd);
                     wait_fg(temp->pid);
                     Sigprocmask(SIG_BLOCK, &mask_one, NULL);
                     // fprintf(stdout, "line 462!\n");
@@ -564,7 +577,7 @@ void fg_bg_kill_finder(char **argv, int mod)
                     if (temp->status != RUNNING)
                     {
                         Kill(-change_job(idx, -1, RUNNING, false, INDEX), SIGCONT); // 링크드 리스트 내에서 바꿔주고  신호 보내주기
-                        fprintf(stdout, "[%d] Running %s", temp->idx, temp->cmd);
+                        fprintf(stdout, "[%d] Running %s\n", temp->idx, temp->cmd);
                     }
                     else
                         fprintf(stdout, "bg: job %d already in background\n", temp->idx);

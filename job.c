@@ -20,7 +20,7 @@ void job_list()
             strcpy(job_status, "Stopped");
             break;
         }
-        fprintf(stdout, "[%d]%s %s          %s", cur->idx, " ", job_status, cur->cmd); // cmd명령어에 엔터있어서 딱히 개행 안함 ㅋㅋㅋ
+        fprintf(stdout, "[%d]%s %s          %s\n", cur->idx, " ", job_status, cur->cmd);
         cur = cur->next;
     }
 }
@@ -29,6 +29,7 @@ void add_job(int pid, int status, int fgFlag, char *cmd_line)
 {
     /*프로세스가 하나도 추가가 되지 않았다면*/
     JOB_INFO *pnew = (JOB_INFO *)malloc(sizeof(JOB_INFO));
+    char temp[MAXLINE];
     pnew->pid = pid;
     pnew->status = status;
     pnew->fgFlag = fgFlag;
