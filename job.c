@@ -17,7 +17,7 @@ void job_list()
             strcpy(job_status, "Done");
             break;
         case STOPPED:
-            strcpy(job_status, "Stopped");
+            strcpy(job_status, "Suspended");
             break;
         }
         fprintf(stdout, "[%d]%s %s          %s\n", cur->idx, " ", job_status, cur->cmd);
