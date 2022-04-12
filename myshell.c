@@ -95,7 +95,7 @@ void eval(char *cmdline, bool got_piped, int step)
     { /*pipe 유무를 less 유무 -1 의 유무 판단*/
         if (!strcmp(argv[argc], "|"))
             pipeFlag = true;
-        if (!strcmp(argv[argc], "less"))
+        if (!strcmp(argv[argc], "less") || !strcmp(argv[argc], "vi"))
             lessFlag = true;
         for (int i = 0; i < strlen(argv[argc]); i++)
         {
